@@ -2,6 +2,8 @@
 This fork allows the vision tower to swap with the drafter so that it can process both image and take advantage of the speed
 **if it's text only.** That means that a chat containing image would fall back to the slow speed without a drafter. 
 
+You would need to set `XYZ_ALLOW_MMPROJ_WITH_DRAFTER=1` to enable it. 
+
 Why would this be useful, anyhow? If you're using the usual chat window, it wouldn't be useful -- put an image and violà, 
 you lose the drafter for the rest of your life. **If you have a custom frontend**, though, you could do something useful with it,
 like asking it to describe the image and then your frontend will swap that actual base64 image for the description, and therefore
