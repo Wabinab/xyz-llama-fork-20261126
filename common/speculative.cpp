@@ -526,6 +526,14 @@ struct common_speculative_impl_draft_xyz : public common_speculative_impl {
         if (n <= 0) {
             return;
         }
+        // xyz fork (E): stale rows that do not continue ctx_dft's KV would only fail to decode; keep them
+        // (the ROLLBACK logic drops them when a continuous batch arrives), exactly as a failed flush does.
+        {
+            const llama_pos mem_max = llama_memory_seq_pos_max(llama_get_memory(params.ctx_dft), seq_id);
+            if (mem_max >= 0 && stash_rows[seq_id].front().pos != mem_max + 1) {
+                return;
+            }
+        }
         llama_batch b = llama_batch_init(/*n_tokens=*/ n, /*embd=*/ n_embd_dec, /*n_seq_max=*/ 1);
         b.token = (llama_token *) malloc(sizeof(llama_token) * n);
         for (int32_t k = 0; k < n; ++k) {
@@ -949,6 +957,49 @@ struct common_speculative_impl_draft_xyz : public common_speculative_impl {
             // this ubatch's own rows (their positions are older). Emitting them also makes them count as written.
             const int32_t   n_stash         = stash_trim(seq_id);
             const llama_pos stashed_pos_max = n_stash > 0 ? stash_pos_max(seq_id) : -1;
+            // xyz fork (D2): skip the mirror for a ubatch that cannot continue ctx_dft's KV contiguously (the
+            // batches after a media chunk keep the target's M-RoPE-compressed positions: KV ends at 57 while the
+            // batch starts at 73, ctx_dft's memory module rejects that -> HTTP 500). What this call would emit
+            // first mirrors the code below exactly: the stashed rows, else the deferred boundary row (all three
+            // bridge preconditions), else this ubatch's first row, else (single-token batch) the position the new
+            // deferred boundary will have. ctx_dft's state is left untouched; the ROLLBACK block above re-syncs
+            // it when a continuous batch for this sequence arrives again.
+            {
+                const llama_pos dft_mem_max = llama_memory_seq_pos_max(llama_get_memory(ctx_dft), seq_id);
+                bool rows_increasing = true;
+                for (int32_t k = beg + 1; k <= end; ++k) {
+                    if (batch_in.pos[k] <= batch_in.pos[k - 1]) {
+                        rows_increasing = false;
+                        break;
+                    }
+                }
+                // the first row this call needs ctx_dft (or its stash) to continue with
+                llama_pos next_needed;
+                if (pending_pos >= 0 && pending_pos + 1 == batch_in.pos[beg] &&
+                        pending_pos > std::max(dft_mem_max, stashed_pos_max)) {
+                    next_needed = pending_pos;
+                } else if (end > beg) {
+                    next_needed = batch_in.pos[beg];
+                } else {
+                    next_needed = batch_in.pos[end];
+                }
+                // the last row ctx_dft holds, or has queued in its stash (stashed_pos_max is -1 when the stash is empty).
+                // Checking only the stash's FRONT is not enough: rows appended behind a stash that ends before a
+                // media chunk would leave a hole inside the stash, and flushing it fails ("positions are not continuous").
+                const llama_pos last_pos = std::max(dft_mem_max, stashed_pos_max);
+                const bool stash_ok = n_stash == 0 || dft_mem_max < 0 || stash_rows[seq_id].front().pos == dft_mem_max + 1;
+                const bool next_ok  = last_pos < 0 || next_needed == last_pos + 1;
+                if (!rows_increasing || !stash_ok || !next_ok) {
+                    static int n_logged = 0;
+                    if (n_logged++ < 16) {
+                        fprintf(stderr, "xyz-mm: drafter mirror skipped (seq %d): next row %d, ctx_dft/stash ends at %d (KV %d, stash %d rows), batch pos %d..%d\n",
+                                (int) seq_id, (int) next_needed, (int) last_pos, (int) dft_mem_max, (int) n_stash,
+                                (int) batch_in.pos[beg], (int) batch_in.pos[end]);
+                    }
+                    continue;
+                }
+            }
+
             // unless they don't fit: a prompt cut at a user message can leave a chunk of <= 16 tokens, which the catch-up
             // merge stashes like a decode round, and a full n_batch chunk right after it overflowed this batch
             // (12 stashed + 1 boundary + 2047 = 2060 > 2048, "llama_batch size exceeded"). Then they go through alone.

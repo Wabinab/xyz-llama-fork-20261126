@@ -504,6 +504,13 @@ struct server_slot {
             return 0;
         }
 
+        // xyz fork: a slot whose context holds media (image/audio) runs as plain decode, no drafting
+        if (prompt.tokens.has_mtmd &&
+            (prompt.tokens.find_next_media_chunk(0).first != nullptr ||
+             (!prompt.tokens.empty() && prompt.tokens[0] == LLAMA_TOKEN_NULL))) {
+            return 0;
+        }
+
         // determine the max draft that fits the current slot state
         // note: slot.prompt is not yet expanded with the `id` token sampled above
         //       also, need to leave space for 1 extra token to allow context shifts
@@ -779,11 +786,10 @@ static int process_mtmd_chunk(const server_slot & slot, mtmd::batch_ptr & mbatch
             float * embd = mtmd_batch_get_output_embd(mbatch.get(), chunk.get());
             if (embd) {
                 void * cb_data = slot.spec;
+                // xyz fork (D1): never mirror a media chunk into the drafter
                 static auto cb = [](llama_batch batch, void * user_data) {
-                    common_speculative * spec = static_cast<common_speculative *>(user_data);
-                    if (!common_speculative_process(spec, batch)) {
-                        return 1;
-                    }
+                    (void) batch;
+                    (void) user_data;
                     return 0;
                 };
 
@@ -1074,7 +1080,7 @@ private:
         const bool has_spec = has_draft || spec_mtp;
         // the drafter's rounds (early verify, replay rollback, xyz-engine) work on plain token lists: with a drafter the
         // server is text only. -hf fetches a repo's projector on its own, so it is dropped here, for every launcher
-        if (has_spec && !params_base.mmproj.path.empty()) {
+        if (has_spec && !params_base.mmproj.path.empty() && !getenv("XYZ_ALLOW_MMPROJ_WITH_DRAFTER")) {
             SRV_WRN("the drafter is text only: the multimodal projector '%s' is not loaded\n", params_base.mmproj.path.c_str());
             params_base.mmproj.path.clear();
         }
