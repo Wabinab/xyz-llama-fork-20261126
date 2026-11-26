@@ -1,3 +1,20 @@
+# About This Fork
+This fork allows the vision tower to swap with the drafter so that it can process both image and take advantage of the speed
+**if it's text only.** That means that a chat containing image would fall back to the slow speed without a drafter. 
+
+Why would this be useful, anyhow? If you're using the usual chat window, it wouldn't be useful -- put an image and violà, 
+you lose the drafter for the rest of your life. **If you have a custom frontend**, though, you could do something useful with it,
+like asking it to describe the image and then your frontend will swap that actual base64 image for the description, and therefore
+you're back to 'text-only' again! 
+
+If you have a frontend similar to [SolveIt](solve.it.com) (like one built yourself), then you really can do something cool with it,
+like unchecking the particular chat you don't want to send (i.e. the one with the image) and then you're back to text-only. This way,
+you can **rent a single GPU for both vision while taking advantage of the drafter** whereas previously, you need the plain bonsai and 
+this xyz fork to do 2 things. 
+
+All in all, it's only useful _IF AND ONLY IF_ you have a custom frontend. 
+
+---
 # xyz
 
 Ternary Bonsai 2 27B with 160k context in about 8 GB of GPU memory, running at about 150 tokens/s on an RTX 4070 Ti SUPER.
