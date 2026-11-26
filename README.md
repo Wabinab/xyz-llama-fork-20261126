@@ -14,6 +14,8 @@ this xyz fork to do 2 things.
 
 All in all, it's only useful _IF AND ONLY IF_ you have a custom frontend. 
 
+The exact patch is in `patch_xyz.py` file, we've run `python3 patch_xyz.py . 1` to patch the files. 
+
 ---
 # xyz
 

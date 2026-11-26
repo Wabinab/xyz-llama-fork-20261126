@@ -3233,7 +3233,7 @@ private:
         }
 
         const llama_tokens * spec_hist = &slot.prompt.tokens.get_tokens();
-        if (slot.prompt.tokens.has_mtmd) {
+        if (false) {
             slot.spec_prompt = slot.prompt.tokens.get_text_tokens();
             spec_hist        = &slot.spec_prompt;
         }
@@ -3247,7 +3247,7 @@ private:
             /* .result   = */ &slot.spec_draft,
         };
         dp.coupled_nonce = slot.spec_coupled_nonce;
-        if (spec_early_verify_ok && !slot.prompt.tokens.has_mtmd) {
+        if (spec_early_verify_ok) {
             dp.early_rs_prev = slot.spec_rs_prev;
         }
 
